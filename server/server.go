@@ -13,29 +13,40 @@ import (
 // path for download
 
 type Server struct {
-	instance *http.Server
+	instance    *http.Server
+	hostAddress string
+	wait        chan bool
 }
 
 type Config struct {
 	Port string
 }
 
+func (s *Server) Wait() {
+	<-s.wait
+}
+func (s *Server) Welcome() {
+	fmt.Printf("Listening and running on %s\n", s.hostAddress)
+	fmt.Println("Enter the address above to list, send or download")
+}
+
 func NewServer(config Config) (*Server, error) {
 	httpServer := &http.Server{}
 	server := &Server{}
 	server.instance = httpServer
+	server.wait = make(chan bool)
 	var port string
 	if config.Port == " " {
 		port = "8080"
 	} else {
 		port = config.Port
 	}
+	server.hostAddress = getHostAddress(port)
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, "Hurray you made it to the test server")
+		fmt.Fprint(w, "Welcome you have made it so far")
 	})
 	go func() {
-		hostAddress := getHostAddress(port)
-		listener, err := net.Listen("tcp", hostAddress)
+		listener, err := net.Listen("tcp", server.hostAddress)
 		if err != nil {
 			fmt.Println("Couldn't create the server")
 			return
