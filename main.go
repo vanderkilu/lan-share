@@ -16,5 +16,7 @@ func main() {
 		log.Fatal(err)
 	}
 	s.Welcome()
+	s.SetMountPath(".")
 	s.Wait()
+
 }
