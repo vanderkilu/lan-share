@@ -11,11 +11,6 @@ import (
 	"strconv"
 )
 
-// server - take in url
-// upload path
-// browse path
-// path for download
-
 type Server struct {
 	instance     *http.Server
 	hostAddress  string
