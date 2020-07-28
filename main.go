@@ -16,7 +16,8 @@ func main() {
 		log.Fatal(err)
 	}
 	s.Welcome()
-	s.SetMountPath(".")
+	s.SetPath(".", true)
+	s.SetPath("./main.go", false)
 	s.Wait()
 
 }

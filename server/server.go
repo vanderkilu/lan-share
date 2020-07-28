@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 )
 
 // server - take in url
@@ -16,10 +17,11 @@ import (
 // path for download
 
 type Server struct {
-	instance    *http.Server
-	hostAddress string
-	errorChan   chan bool
-	browsePath  string
+	instance     *http.Server
+	hostAddress  string
+	errorChan    chan bool
+	browsePath   string
+	downloadPath string
 }
 
 type Config struct {
@@ -40,13 +42,15 @@ func (s *Server) Welcome() {
 }
 
 func (s *Server) handleRequests() {
+
+	//mount a file path and browse files in it
 	http.HandleFunc("/browse", func(w http.ResponseWriter, r *http.Request) {
 		var files []BrowseFile
 		if s.browsePath != "" {
 			err := filepath.Walk(s.browsePath, func(path string, info os.FileInfo, err error) error {
 				browseFile := BrowseFile{}
 				fullPath := filepath.Join(s.browsePath, path)
-				//Todo, check if directory file is already included
+
 				if info.IsDir() {
 					browseFile.IsDir = true
 					browseFile.Path = s.browsePath
@@ -55,7 +59,12 @@ func (s *Server) handleRequests() {
 					browseFile.Path = fullPath
 				}
 
-				files = append(files, browseFile)
+				//account for duplicate file/dir names
+				_, isIn := find(files, browseFile.Path)
+
+				if !isIn {
+					files = append(files, browseFile)
+				}
 				return nil
 			})
 			if err != nil {
@@ -67,17 +76,34 @@ func (s *Server) handleRequests() {
 			fmt.Println("No directory or browse path provided")
 			s.errorChan <- true
 		}
+	})
 
+	//Download a file by name
+	http.HandleFunc("/download", func(w http.ResponseWriter, r *http.Request) {
+		if s.downloadPath == "" {
+			fmt.Println("No download path specified")
+			s.errorChan <- true
+		}
+		path := s.downloadPath
+		fileName := filepath.Base(path)
+
+		w.Header().Set("Content-Disposition", "attachment; filename="+strconv.Quote(fileName))
+		w.Header().Set("Content-Type", "application/octet-stream")
+		http.ServeFile(w, r, path)
 	})
 }
 
-func (s *Server) SetMountPath(path string) {
+func (s *Server) SetPath(path string, isMountPath bool) {
 	absPath, err := filepath.Abs(path)
 	if err != nil {
 		fmt.Println("Path provided could not be resolved")
 		s.errorChan <- true
 	}
-	s.browsePath = absPath
+	if isMountPath {
+		s.browsePath = absPath
+	} else {
+		s.downloadPath = absPath
+	}
 
 }
 
@@ -108,6 +134,15 @@ func NewServer(config Config) (*Server, error) {
 		}
 	}()
 	return server, nil
+}
+
+func find(slice []BrowseFile, path string) (int, bool) {
+	for i, file := range slice {
+		if file.Path == path {
+			return i, true
+		}
+	}
+	return -1, false
 }
 
 func getHostAddress(port string) string {
