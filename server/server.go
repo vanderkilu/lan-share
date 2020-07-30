@@ -1,8 +1,12 @@
 package server
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -80,6 +84,19 @@ func (s *Server) handleRequests() {
 			s.errorChan <- true
 		}
 		path := s.downloadPath
+		//check if dir, compress and create tar file
+
+		if isDir(path) {
+			err := compressDir(path)
+			if err != nil {
+				fmt.Println("Unable to zip folder for download")
+				s.errorChan <- true
+			} else {
+				path = fmt.Sprintf("%s.tar.gzip", filepath.ToSlash(path))
+				fmt.Println(path)
+			}
+		}
+
 		fileName := filepath.Base(path)
 
 		w.Header().Set("Content-Disposition", "attachment; filename="+strconv.Quote(fileName))
@@ -140,6 +157,49 @@ func find(slice []BrowseFile, path string) (int, bool) {
 	return -1, false
 }
 
+//adapted from https://gist.github.com/mimoo/25fc9716e0f1353791f5908f94d6e726
+func compressDir(dir string) error {
+	var buff bytes.Buffer
+	zipW := gzip.NewWriter(&buff)
+	tarW := tar.NewWriter(zipW)
+
+	filepath.Walk(dir, func(file string, info os.FileInfo, err error) error {
+		// generate header(metadata)
+		header, err := tar.FileInfoHeader(info, file)
+		if err != nil {
+			return err
+		}
+		header.Name = filepath.ToSlash(file)
+		//write the header
+		if err := tarW.WriteHeader(header); err != nil {
+			return err
+		}
+
+		//check if not a dir write content
+		if !info.IsDir() {
+			data, err := os.Open(file)
+			if err != nil {
+				return err
+			}
+			//write file content to tar
+			if _, err := io.Copy(tarW, data); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	//actually create the tar file
+	if err := tarW.Close(); err != nil {
+		return err
+	}
+	//create gzip
+	if err := zipW.Close(); err != nil {
+		return err
+	}
+	return nil
+
+}
+
 func getHostAddress(port string) string {
 	localIP := getOutboundIP()
 	return fmt.Sprintf("%s:%s", localIP, port)
@@ -155,4 +215,16 @@ func getOutboundIP() net.IP {
 	localAddr := conn.LocalAddr().(*net.UDPAddr)
 
 	return localAddr.IP
+}
+
+func isDir(path string) bool {
+	fileInfo, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	mode := fileInfo.Mode()
+	if mode.IsDir() {
+		return true
+	}
+	return false
 }
