@@ -26,8 +26,9 @@ type Config struct {
 }
 
 type BrowseFile struct {
-	Path  string `json: "path"`
-	IsDir bool   `json: "isDir"`
+	Path     string `json: "path"`
+	IsDir    bool   `json: "isDir"`
+	BaseName string `json: "baseName"`
 }
 
 func (s *Server) Wait() {
@@ -50,13 +51,14 @@ func (s *Server) handleRequests() {
 
 				if info.IsDir() {
 					browseFile.IsDir = true
-					browseFile.Path = s.browsePath
+					browseFile.Path = fullPath
+					browseFile.BaseName = filepath.Base(fullPath)
 				} else {
 					browseFile.IsDir = false
 					browseFile.Path = fullPath
+					browseFile.BaseName = filepath.Base(fullPath)
 				}
 
-				//account for duplicate file/dir names
 				_, isIn := find(files, browseFile.Path)
 
 				if !isIn {
@@ -157,8 +159,6 @@ func find(slice []BrowseFile, path string) (int, bool) {
 	}
 	return -1, false
 }
-
-//adapted from https://gist.github.com/mimoo/25fc9716e0f1353791f5908f94d6e726
 
 func getHostAddress(port string) string {
 	localIP := getOutboundIP()
