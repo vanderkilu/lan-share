@@ -79,6 +79,7 @@ func (s *Server) handleRequests() {
 
 	//Download a file by name
 	http.HandleFunc("/download", func(w http.ResponseWriter, r *http.Request) {
+
 		if s.downloadPath == "" {
 			fmt.Println("No download path specified")
 			s.errorChan <- true
@@ -101,6 +102,8 @@ func (s *Server) handleRequests() {
 
 		fileName := filepath.Base(path)
 		fmt.Println(fileName)
+
+		defer os.Remove(path)
 
 		w.Header().Set("Content-Disposition", "attachment; filename="+strconv.Quote(fileName))
 		w.Header().Set("Content-Type", contentType)
