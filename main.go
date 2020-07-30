@@ -17,7 +17,7 @@ func main() {
 	}
 	s.Welcome()
 	s.SetPath(".", true)
-	s.SetPath("./main.go", false)
+	s.SetPath("./server", false)
 	s.Wait()
 
 }
