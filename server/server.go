@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -19,6 +20,7 @@ type Server struct {
 	errorChan    chan bool
 	browsePath   string
 	downloadPath string
+	uploadPath   string
 }
 
 type Config struct {
@@ -109,6 +111,56 @@ func (s *Server) handleRequests() {
 		w.Header().Set("Content-Type", contentType)
 		http.ServeFile(w, r, path)
 	})
+
+	http.HandleFunc("/upload", func(w http.ResponseWriter, r *http.Request) {
+		// create file reader from request
+		reader, err := r.MultipartReader()
+		if err != nil {
+			fmt.Println("Error creating file reader")
+			s.errorChan <- true
+		}
+		for {
+			part, err := reader.NextPart()
+			if err == io.EOF {
+				break
+			}
+			if part.FileName() == "" {
+				continue
+			}
+			fileName := part.FileName()
+
+			var uploadDir string
+
+			if s.uploadPath == "" {
+				uploadDir = "../tmp"
+			}
+			uploadFile, err := os.Create(filepath.Join(uploadDir, fileName))
+			if err != nil {
+				fmt.Println("There was an error creating upload directory")
+				s.errorChan <- true
+			}
+			defer uploadFile.Close()
+			buff := make([]byte, 1024)
+			for {
+				chunk, err := part.Read(buff)
+				if err != nil || err == io.EOF {
+					fmt.Println("Error writing file to disk")
+					s.errorChan <- true
+					return
+				}
+				if chunk == 0 {
+					break
+				}
+				if _, err := uploadFile.Write(buff[:chunk]); err != nil {
+					fmt.Println("Error writing file to disk")
+					s.errorChan <- true
+					return
+				}
+			}
+
+		}
+
+	})
 }
 
 func (s *Server) SetPath(path string, isMountPath bool) {
@@ -122,7 +174,6 @@ func (s *Server) SetPath(path string, isMountPath bool) {
 	} else {
 		s.downloadPath = absPath
 	}
-
 }
 
 func NewServer(config Config) (*Server, error) {
