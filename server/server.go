@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"text/template"
 
 	"../utils"
 )
@@ -113,51 +114,65 @@ func (s *Server) handleRequests() {
 	})
 
 	http.HandleFunc("/upload", func(w http.ResponseWriter, r *http.Request) {
+		absTempPath, _ := filepath.Abs("./views")
 		// create file reader from request
-		reader, err := r.MultipartReader()
-		if err != nil {
-			fmt.Println("Error creating file reader")
-			s.errorChan <- true
-		}
-		for {
-			part, err := reader.NextPart()
-			if err == io.EOF {
-				break
+		if r.Method == "GET" {
+			tmpl := template.Must(template.ParseFiles(absTempPath + "/upload.html"))
+			type Data struct {
+				Route string
 			}
-			if part.FileName() == "" {
-				continue
-			}
-			fileName := part.FileName()
-
-			var uploadDir string
-
-			if s.uploadPath == "" {
-				uploadDir = "../tmp"
-			}
-			uploadFile, err := os.Create(filepath.Join(uploadDir, fileName))
+			data := Data{Route: "/upload"}
+			tmpl.Execute(w, data)
+		} else {
+			reader, err := r.MultipartReader()
 			if err != nil {
-				fmt.Println("There was an error creating upload directory")
+				fmt.Println("Error creating file reader")
 				s.errorChan <- true
 			}
-			defer uploadFile.Close()
-			buff := make([]byte, 1024)
 			for {
-				chunk, err := part.Read(buff)
-				if err != nil || err == io.EOF {
-					fmt.Println("Error writing file to disk")
-					s.errorChan <- true
-					return
-				}
-				if chunk == 0 {
+				part, err := reader.NextPart()
+				if err == io.EOF {
 					break
 				}
-				if _, err := uploadFile.Write(buff[:chunk]); err != nil {
-					fmt.Println("Error writing file to disk")
-					s.errorChan <- true
-					return
+				if part.FileName() == "" {
+					continue
 				}
-			}
+				fileName := part.FileName()
 
+				var uploadDir string
+
+				if s.uploadPath == "" {
+					absUploadPath, _ := filepath.Abs("./tmp")
+					uploadDir = absUploadPath
+				}
+				uploadFile, err := os.Create(filepath.Join(uploadDir, fileName))
+				if err != nil {
+					fmt.Println("There was an error creating upload directory")
+					s.errorChan <- true
+				}
+				defer uploadFile.Close()
+				buff := make([]byte, 1024)
+				for {
+					chunk, err := part.Read(buff)
+					if err != nil && err != io.EOF {
+						fmt.Println(err)
+						fmt.Println("Error writing file to disk")
+						s.errorChan <- true
+						return
+					}
+					if chunk == 0 {
+						break
+					}
+					if _, err := uploadFile.Write(buff[:chunk]); err != nil {
+						fmt.Println("Error writing file to disk")
+						s.errorChan <- true
+						return
+					}
+				}
+
+			}
+			tmpl := template.Must(template.ParseFiles("../views/uploadDone.html"))
+			tmpl.Execute(w, nil)
 		}
 
 	})
@@ -242,3 +257,10 @@ func isDir(path string) bool {
 	}
 	return false
 }
+
+//todo
+// structure upload well
+// make upload path dynamic
+// create a function to handle upload
+// allow multiple uploads
+// allow folder uploads
